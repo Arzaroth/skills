@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="skills">
+  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a1c"/><stop offset="1" stop-color="#1c130b"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#tile)"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="13.5" fill="none" stroke="#fff" stroke-opacity=".08"/>
+  <rect x="10" y="17" width="28" height="36" rx="4" fill="#9a7a50" transform="rotate(-14 24 35)"/>
+  <rect x="26" y="17" width="28" height="36" rx="4" fill="#c29a5f" transform="rotate(12 40 35)"/>
+  <rect x="18" y="13" width="28" height="38" rx="4" fill="#f6efe0"/>
+  <path d="M32 19c1.300 6.700 3.300 8.700 10 10-6.700 1.300-8.700 3.300-10 10-1.300-6.700-3.300-8.700-10-10 6.700-1.300 8.700-3.300 10-10z" fill="#e8843a"/>
+  <path d="M25 45h14" stroke="#b8a888" stroke-width="2.500" stroke-linecap="round"/>
+</svg>

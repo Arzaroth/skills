@@ -184,6 +184,8 @@ diffs and full thread bodies, so it belongs in a subagent regardless of length.
 | `giveup reason=wrong_pr` | the head branch is not the one you named. Wrong number, or the branch moved on. Re-resolve with `find <branch>`; do not re-run without `--expect-branch` |
 | `review_done actionable=0` | no findings: go to §5 |
 | `review_done actionable=N` | **check the budget first** (§3), then §3 or stop |
+| `review_done ... outside=M` | same, and M of the findings sit outside the diff, with no thread: `unresolved=0` says nothing about them. Pass the count to the round |
+| `review_unread` | the reviewer says this head is reviewed, but its verdict could not be parsed. Read the bot comments yourself (`prctl.py reviews`, `outside`), act on what they say, and report the wording so it can be added to `classify.py`. Never treat it as clean |
 | `human_activity` | §3 (read what they said first) |
 | `new_threads` | someone opened threads mid-watch: §3 |
 | `approved` | §5 |
@@ -193,7 +195,7 @@ diffs and full thread bodies, so it belongs in a subagent regardless of length.
 | `closed` | stop, tell the user |
 | `rate_limited` (exit 4) | every account is out of quota, so no review will come before `retry_at`. Act **now**: if the user authorised paid reviews, write `@coderabbitai review --use-credits` to a file, post it with `prctl.py --repo <slug> --allow-paid comment <pr> --body-file <f>`, then watch with `--no-trigger`. Otherwise tell the user the window and the paid option in one line, and schedule the next watch at `retry_at` |
 | `review_failed` (exit 5) | the reviewer refused the request outright ("Review failed") and will not report back. Ask once more (paid if the user authorised it, after a short pause); if it fails again, stop and tell the user rather than waiting |
-| `still_waiting` | spawn another watch; count it |
+| `still_waiting` | spawn another watch; count it. With `unparsed_bot_comments=`, read those comments first: they may be the verdict |
 | `giveup reason=trigger_cap` | stop. Something is unreadable; do not raise the cap |
 | `giveup reason=forge_error` | the watch could not read the PR for 5 polls running. Read `error=`: a 401 under `identity=default` means the user's own login expired and only they can fix it; anything else, check the forge by hand (`prctl.py state`) before watching again. A rotated credential refused with 401 is parked and the call retried as the default on its own, so it never ends a watch |
 | `blocked=already` on any verdict | the reviewer says this head is already reviewed. Act on the verdict you have; do not re-trigger, and do not escalate to `full review` without asking |
@@ -405,7 +407,7 @@ Default. Refuse to merge unless **all** of these hold - these are hard
 preconditions, not prompts:
 
 - `state=open`, `draft=false`
-- `unresolved=0`
+- `unresolved=0`, and every outside-diff finding (`prctl.py outside <pr> --after <push>`) fixed or answered
 - **the verdict covers the current head**: `stale_risk=0`, and no commit has
   landed since the reviewed head. **Waived once a round budget is spent** (§4) -
   a budget accepts an unreviewed final push, and enforcing this there would

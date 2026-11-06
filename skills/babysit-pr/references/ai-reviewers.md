@@ -23,6 +23,19 @@ Wait for one of these two strings, and nothing else:
 | `Actionable comments posted: N` | finished, N findings |
 | `No actionable comments were generated` | finished, clean |
 
+## Findings outside the diff
+
+CodeRabbit cannot post a comment on a line the diff does not touch, so it writes
+those findings into the review's body under `Outside diff range comments (N)`. They
+open no thread. A review with nothing else has no `Actionable comments posted` line
+either, only a `[!CAUTION]` header, so it is a finished review with findings that
+looks like nothing at all. `classify.py` reads it as `done` with `outside=N`, and
+`prctl.py outside` gets the text.
+
+Measured on a live PR: the watcher read two such reviews as silence, re-asked, got
+"Already reviewed the last commit", and waited out its timeout both times. With
+`unresolved=0` and green CI, a run trusting that picture would have merged over them.
+
 ## Staleness
 
 A verdict describes the head the bot reviewed, not the head you have now. After

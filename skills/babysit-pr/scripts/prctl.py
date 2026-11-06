@@ -22,6 +22,7 @@ import pathlib
 import re
 import sys
 
+from classify import is_bot, outside_findings
 from forge import AddressError, ForgeError, PaidActionRefused, detect
 
 # An allowlist, not a template. Every phrase here is free; nothing that bills is
@@ -120,6 +121,7 @@ def build_parser():
     cmd("state")
     s = cmd("threads"); s.add_argument("--unresolved", action="store_true")
     cmd("reviews")
+    s = cmd("outside"); s.add_argument("--after", default=None)
     cmd("approvals")
     cmd("body")
     s = cmd("set-body"); s.add_argument("body", nargs="?"); s.add_argument("--body-file")
@@ -206,6 +208,14 @@ def main(argv=None):
 
     if cmd == "reviews":
         emit_ndjson(f.reviews(args.pr))
+        return 0
+
+    if cmd == "outside":
+        emit_ndjson(
+            {"id": c.get("id"), "created_at": c.get("created_at"), "text": text}
+            for c in f.reviews(args.pr)
+            if is_bot(c.get("author")) and (text := outside_findings(c.get("body")))
+            and (not args.after or c.get("created_at", "") > args.after))
         return 0
 
     if cmd == "approvals":

@@ -57,6 +57,8 @@ create --head B --base B --title T [--body X|--body-file F] [--draft]   -> numbe
 state <pr>                        KV snapshot
 threads <pr> [--unresolved]       NDJSON, one review thread per line
 reviews <pr>                      NDJSON, top-level / review-body comments, oldest first
+outside <pr> [--after ISO]        NDJSON {id,created_at,text}, a bot review's outside-diff
+                                  findings: readable, its AI prompt blocks left out
 approvals <pr>                    NDJSON of approvals and change-requests
 reply <pr> <thread_id> <body|-|--body-file F>   answer an existing thread
 review-comment <pr> --file F --line N --body B   open a NEW line-anchored thread

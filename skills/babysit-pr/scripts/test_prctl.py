@@ -101,6 +101,21 @@ class TestOutputFormats(unittest.TestCase):
             for line in out.strip().splitlines():
                 json.loads(line)
 
+    def test_outside_prints_only_a_bot_review_s_findings_since_the_push(self):
+        body = "> **Outside diff range comments (1)**\n> `a.py:3` a finding\n"
+        reviews = [
+            {"id": "old", "author": "coderabbitai[bot]", "created_at": "2026-01-01T00:00:00Z", "body": body},
+            {"id": "new", "author": "coderabbitai[bot]", "created_at": "2026-01-02T00:00:00Z", "body": body},
+            {"id": "human", "author": "allan", "created_at": "2026-01-02T00:00:00Z", "body": body},
+            {"id": "clean", "author": "coderabbitai[bot]", "created_at": "2026-01-02T00:00:00Z", "body": "hi"},
+        ]
+        with mock.patch.dict(FakeForge.RETURNS, {"reviews": reviews}):
+            _, out, code = run(["outside", "7", "--after", "2026-01-01T12:00:00Z"])
+        rows = [json.loads(line) for line in out.strip().splitlines()]
+        self.assertEqual(code, 0)
+        self.assertEqual([r["id"] for r in rows], ["new"])
+        self.assertIn("a.py:3", rows[0]["text"])
+
     def test_find_prints_empty_string_when_absent(self):
         f = FakeForge()
         f.RETURNS = {**FakeForge.RETURNS, "find": None}

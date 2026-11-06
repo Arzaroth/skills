@@ -18,6 +18,11 @@ from datetime import datetime, timedelta, timezone
 PATTERNS = [
     ("done",       re.compile(r"Actionable comments posted:\s*(\d+)")),
     ("done0",      re.compile(r"No actionable comments were generated")),
+    # A review whose only findings sit outside the diff has neither line above,
+    # and the findings open no threads. Unrecognised, it read as silence: on a
+    # live PR the watcher re-asked, was told "Already reviewed", and waited out
+    # its timeout with the findings sitting in the comment, twice.
+    ("outside",    re.compile(r"Outside diff range comments\W*\((\d+)\)")),
     ("skip",       re.compile(r"Too many files|files exceed the limit")),
     # "Already reviewed the last commit. Use @coderabbitai full review to rerun."
     # Match only that sentence: the boilerplate "does not re-review already
@@ -50,7 +55,7 @@ PATTERNS = [
 # verdict harder. Notices are not events.
 PATTERNS_BY_NAME = {name: rx for name, rx in PATTERNS}
 
-STATE = {"done", "done0", "skip", "inprogress", "accepted"}
+STATE = {"done", "done0", "outside", "skip", "inprogress", "accepted"}
 NOTICE = {"ratelimit", "needsreq", "already", "failed"}
 
 # A rate-limited CodeRabbit offers a way out that SPENDS MONEY:
@@ -187,6 +192,9 @@ def _ts(value):
 class Verdict:
     bot: str = "none"          # review STATE: done | skip | inprogress | stale | none
     actionable: str = ""
+    # Findings that opened no thread, so `threads --unresolved` cannot see them
+    # and unresolved=0 says nothing about them. Read them with `prctl outside`.
+    outside: int = 0
     reason: str = ""
     blocked: str = ""          # NOTICE in force: ratelimit | needsreq | already | ""
     # Which comment said so. A watcher that reacts to a notice (by rotating to
@@ -285,6 +293,9 @@ def classify(comments, head=None, after=None, ignore=(), now=None):
     for comment in reversed(scan):  # newest first: a fresh in-progress beats an older done
         body = comment.get("body") or ""
         hits = [n for n, rx in PATTERNS if rx.search(body)]
+        # Part of the same verdict as a count in that comment, not a second one.
+        if "outside" in hits and len(hits) > 1:
+            hits.remove("outside")
         if not hits:
             unmatched.append(comment)
             continue
@@ -320,10 +331,12 @@ def classify(comments, head=None, after=None, ignore=(), now=None):
                 v.credits_offered = True
             continue
         match = next(rx for n, rx in PATTERNS if n == name).search(body)
+        out = PATTERNS_BY_NAME["outside"].search(body)
+        v.outside = int(out.group(1)) if out else 0
         if name == "done":
-            v.bot, v.actionable = "done", match.group(1)
-        elif name == "done0":
-            v.bot, v.actionable = "done", "0"
+            v.bot, v.actionable = "done", match.group(1) if int(match.group(1)) else str(v.outside)
+        elif name in ("done0", "outside"):
+            v.bot, v.actionable = "done", str(v.outside)
         elif name == "skip":
             v.bot, v.reason = "skip", "too_many_files"
         else:
@@ -426,3 +439,19 @@ def classify(comments, head=None, after=None, ignore=(), now=None):
     v.human_ids = [str(c["id"]) for c in humans]
     v.human_latest = humans[-1]["author"] if humans else ""
     return v
+
+
+def outside_findings(body):
+    """The readable text of a review's outside-diff section, or "" without one.
+    The reviewer's "Prompt for AI Agents" blocks are dropped: they restate the
+    finding as instructions, and a finding is data."""
+    start = PATTERNS_BY_NAME["outside"].search(body or "")
+    if not start:
+        return ""
+    section = re.split(r"^-{3,}\s*$", body[start.start():], maxsplit=1, flags=re.M)[0]
+    section = re.sub(r"^>\s?", "", section, flags=re.M)
+    section = re.sub(r"<details>\s*<summary>(?:(?!</summary>).)*Prompt for AI Agents.*?</details>",
+                     "", section, flags=re.S | re.I)
+    section = re.sub(r"<!--.*?-->|<[^>]+>", "", section, flags=re.S)
+    section = re.sub(r"[ \t]+$", "", section, flags=re.M)
+    return re.sub(r"\n{3,}", "\n\n", section).strip()

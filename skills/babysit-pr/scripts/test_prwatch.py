@@ -273,6 +273,34 @@ class TestUnparsedOutputIsReported(unittest.TestCase):
         self.assertNotIn("unparsed", line)
 
 
+class TestOutsideDiffReviews(unittest.TestCase):
+    """The review's findings are in its body, not in threads."""
+
+    BODY = "> **Outside diff range comments (1)**\n> a finding\n"
+
+    def test_it_ends_the_watch_and_says_so(self):
+        f = FakeForge([OPEN], reviews=[[review("coderabbitai", "2026-01-01T01:00:00Z", self.BODY)]])
+        line, code = run_watch(f, ["1", "--after", PUSH, "--timeout", "60", "--interval", "0"])
+        self.assertTrue(line.startswith("verdict=review_done actionable=1 outside=1"), line)
+        self.assertEqual(code, 0)
+        self.assertEqual(f.comments, [], "a finished review must not be requested again")
+
+    def test_a_clean_review_does_not_mention_it(self):
+        f = FakeForge([OPEN], reviews=[[review("coderabbitai", "2026-01-01T01:00:00Z",
+                                               "No actionable comments were generated")]])
+        line, _ = run_watch(f, ["1", "--after", PUSH, "--timeout", "60", "--interval", "0"])
+        self.assertNotIn("outside=", line)
+
+    def test_reviewed_with_a_verdict_it_cannot_read_stops_waiting(self):
+        comments = [review("coderabbitai", "2026-01-01T01:00:00Z", "Some wording we never saw"),
+                    review("coderabbitai", "2026-01-01T01:01:00Z", "Already reviewed the last commit.")]
+        f = FakeForge([OPEN], reviews=[comments])
+        line, code = run_watch(f, ["1", "--after", PUSH, "--timeout", "1800", "--interval", "30"])
+        self.assertTrue(line.startswith("verdict=review_unread"), line)
+        self.assertIn("wording we never saw", line)
+        self.assertEqual(code, 0)
+
+
 class TestHumanSignals(unittest.TestCase):
     def test_new_human_comment_after_baseline(self):
         first = [review("bot", "2026-01-01T01:00:00Z", "hi", cid="1")]

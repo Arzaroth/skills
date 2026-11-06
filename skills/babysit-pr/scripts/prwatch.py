@@ -28,7 +28,8 @@ usage: prwatch.py <pr> --repo SLUG [options]
                       rotate to, so the default costs nothing.
   --ignore A,B        logins whose comments are not "human activity"
 
-Verdicts: merged | review_done actionable=N | review_skipped reason=R
+Verdicts: merged | review_done actionable=N [outside=M] | review_skipped reason=R
+          review_unread unparsed_bot_comments=N (reviewed, verdict not understood)
           human_activity author=X | new_threads | approved | closed | conflict
           still_waiting | giveup reason=R
           rate_limited retry_in= retry_at= credits_offered=1 (every account spent)
@@ -270,11 +271,19 @@ def watch(args, f=None):
 
         if want_bot:
             if verdict.bot == "done":
-                finish("review_done", actionable=verdict.actionable,
+                outside = {"outside": verdict.outside} if verdict.outside else {}
+                finish("review_done", actionable=verdict.actionable, **outside,
                                unresolved=unresolved, ci=state["ci"],
                                head=state["head"], stale_risk=verdict.stale_risk)
             if verdict.bot == "skip":
                 finish("review_skipped", reason=verdict.reason,
+                               head=state["head"])
+            # The reviewer says this head is reviewed and no verdict was found,
+            # so it will not say anything else: waiting cannot help, and the
+            # answer is in a comment we failed to read.
+            if verdict.blocked == "already" and not verdict.running:
+                finish("review_unread", unparsed_bot_comments=verdict.unmatched,
+                               unparsed_sample=repr(verdict.last_unmatched),
                                head=state["head"])
 
         # A rate limit belongs to an ACCOUNT, not to the PR. Another account's

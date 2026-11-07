@@ -134,6 +134,9 @@ coverage check) before it is committed.
      `## Later`, `## Not planned`.
    - `TODO.md`: small work and the decisions to take before each milestone.
    - `CHANGELOG.md`: `# Changelog` and an empty `## [Unreleased]`.
+   - `icon.svg` at the repo root: a self-contained square icon drawn from what
+     the project does, shown to the user for approval. If an app needs the file
+     in a subfolder, keep it there and make the root file a relative symlink.
    - `brain/`: `BRAIN.md` with a topic table and a **Find by
      question** table, `architecture/index.md`, `features/index.md`,
      `glossary.md`, `decisions.md` (including why the name), leaf docs ending
@@ -219,6 +222,15 @@ run=$(gh run list -R <mirror-owner>/<name> --limit 1 --json databaseId --jq '.[0
 gh run watch "$run" -R <mirror-owner>/<name> --exit-status
 ```
 
+Set the icon as the repo avatar, on a Forgejo source of truth through the API,
+then set it by hand as the GitHub social preview when the mirror is public:
+
+```bash
+rsvg-convert -w 512 -h 512 icon.svg -o /tmp/<name>-avatar.png
+printf '{"image":"%s"}' "$(base64 -w0 /tmp/<name>-avatar.png)" \
+  | <forge-cli> api -X POST repos/<owner>/<name>/avatar --input -
+```
+
 ## 5. Coverage
 
 The configured floor, across the whole project, enforced in CI from the first
@@ -257,6 +269,7 @@ left for later (release workflow, decisions in `TODO.md`).
   source of truth's.
 - The first CI run is green on every job, coverage at or above the floor.
 - Every commit is a green layer following the configured commit rules.
+- `icon.svg` exists at the root, approved by the user, and is the repo's avatar.
 - `CLAUDE.md`, `README.md`, `ROADMAP.md`, `TODO.md`, `CHANGELOG.md`, the docs
   base and the three project skills exist and describe this project, not the
   sibling they came from (grep for the sibling's name).

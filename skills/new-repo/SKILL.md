@@ -1,6 +1,6 @@
 ---
 name: new-repo
-description: Set up a new personal project repository the way its siblings are set up - repo on the source-of-truth forge with an optional push mirror, repo identity, licence, a compiling skeleton, CI with a line-coverage floor, pinned toolchain, CLAUDE.md / README / ROADMAP / TODO / CHANGELOG, the brain/ knowledge base, and the project skills (brain, feature-treatment, release), all in layered green commits. Hosts, owner, identities, families, siblings, licences and the coverage floor come from the config. Asks the main decisions (language, monorepo, family, visibility, licence...) with AskUserQuestion first. Use when asked to "create a repo", "set up a new project", "new repo with a GitHub mirror", "scaffold X like the others", or "/new-repo".
+description: Set up a new personal project repository the way its siblings are set up - repo on the source-of-truth forge with an optional mirror on another forge (push or pull, or none), repo identity, licence, a compiling skeleton, CI with a line-coverage floor, pinned toolchain, CLAUDE.md / README / ROADMAP / TODO / CHANGELOG, the brain/ knowledge base, and the project skills (brain, feature-treatment, release), all in layered green commits. Hosts, owner, identities, families, siblings, licences and the coverage floor come from the config. Asks the main decisions (language, monorepo, family, visibility, licence...) with AskUserQuestion first. Use when asked to "create a repo", "set up a new project", "new repo with a GitHub mirror", "scaffold X like the others", or "/new-repo".
 ---
 
 # New repo
@@ -14,11 +14,11 @@ the siblings hold the current templates.
 
 Read `~/.config/skills/new-repo/config.md` before anything else. It sets where repos
 live, the default branch and commit rules, the source-of-truth forge and its
-CLI, the mirror and how it is wired, the families (identity, CI host, release
-host), the sibling templates per stack, the licences in use, the coverage
-floor, the roadmap shape, and the memories to read and update. Below,
-`<forge-cli>`, `<owner>`, `<mirror-owner>`, `<branch>`, `<floor>` and
-`<repos>` stand for those values. If it is missing, tell the user to copy `config.example.md` (next to this file) to `~/.config/skills/new-repo/config.md` and fill it in, and stop.
+CLI, the mirror (none, a push mirror or a pull mirror) and how it is wired, the
+families (identity, CI host, release host), the sibling templates per stack,
+the licences in use, the coverage floor, the roadmap shape, and the memories to
+read and update. Below, `<forge-cli>`, `<owner>`, `<mirror-cli>`,
+`<mirror-owner>`, `<branch>`, `<floor>` and `<repos>` stand for those values. If it is missing, tell the user to copy `config.example.md` (next to this file) to `~/.config/skills/new-repo/config.md` and fill it in, and stop.
 
 **Never invent a number, a convention or a "(Recommended)" label.** Every
 default you propose must come from the config, a sibling repo or a memory, and
@@ -38,7 +38,7 @@ Check the name is free before anything else:
 ```bash
 ls -d <repos>/<name>
 <forge-cli> api repos/<owner>/<name>         # must 404
-gh repo view <mirror-owner>/<name>           # must 404, when there is a GitHub mirror
+<mirror-cli> api repos/<mirror-owner>/<name> # must 404, when there is a mirror
 ```
 
 plus `cargo search` / PyPI / npm as the stack needs.
@@ -178,27 +178,37 @@ EOF
 
 ## 4. Hosts and the mirror
 
-The configured source of truth is `origin`, and nothing else is.
+The configured source of truth is `origin`, and nothing else is. Create the
+repo there and push:
 
 ```bash
 cd <repos>/<name>
 D='<one-line description>'
-<forge-cli> repo create <owner>/<name> --public -d "$D" --default-branch <branch> --source . --push
+<forge-cli> repo create <owner>/<name> --private -d "$D" --source . --push
 ```
 
-(`--private` for a private repo.) When the source of truth is a Forgejo and
-the family runs CI on GitHub, turn Forgejo Actions off; booleans go through
-`--input -` as JSON, since `-f key=false` sends a string:
+(`--public` for a public repo; a Forgejo or Gitea CLI may also want
+`--default-branch <branch>`.) Booleans in a Forgejo or Gitea API body go
+through `--input -` as JSON, since `-f key=false` sends a string.
+
+Then wire the mirror the config names. Whatever the mode, the mirror is
+read-only for people: nobody pushes to it, and the forge holding a copy runs no
+CI of its own unless the family says so (on Forgejo or Gitea,
+`echo '{"has_actions": false}' | <cli> api -X PATCH repos/<o>/<name> --input -`,
+with that host's CLI and owner).
+
+### No mirror
+
+Nothing to wire. Skip to the CI run below.
+
+### Push mirror (the source of truth pushes to the mirror)
+
+For a Forgejo or Gitea source of truth pushing to GitHub. Create the empty
+mirror repo, then a server-side push mirror over SSH with a per-repo deploy
+key, using the interval and key title from the config:
 
 ```bash
-echo '{"has_actions": false}' | <forge-cli> api -X PATCH repos/<owner>/<name> --input -
-gh repo create <mirror-owner>/<name> --public -d "$D"
-```
-
-A Forgejo push mirror to GitHub, over SSH with a per-repo deploy key, using
-the interval and key title from the config:
-
-```bash
+<mirror-cli> repo create <mirror-owner>/<name> --private -d "$D"
 key=$(echo '{"remote_address":"ssh://git@github.com/<mirror-owner>/<name>.git","use_ssh":true,"interval":"<interval>","sync_on_commit":true}' \
   | <forge-cli> api -X POST repos/<owner>/<name>/push_mirrors --input - \
   | python3 -c 'import json,sys;print(json.load(sys.stdin)["public_key"])')
@@ -206,29 +216,71 @@ gh api -X POST repos/<mirror-owner>/<name>/keys -f title="<key title>" -f key="$
 <forge-cli> api -X POST repos/<owner>/<name>/push_mirrors-sync
 ```
 
-The sync is asynchronous and can time out. Poll until the mirror's
-`<branch>` is the local HEAD, re-requesting the sync whenever `last_error` is
-set:
+The sync is asynchronous and can time out without starting. Poll until the
+mirror's `<branch>` is the local HEAD, re-requesting the sync whenever
+`last_error` is set or `last_update` does not move:
 
 ```bash
 <forge-cli> api repos/<owner>/<name>/push_mirrors   # last_update, last_error
 gh api repos/<mirror-owner>/<name>/commits/<branch> --jq .sha
 ```
 
-Then watch the first CI run to green on every job, on the family's CI host:
+A push mirror force-pushes every ref, so it deletes branches that exist only
+on the mirror: use it only when nobody works on the mirror side.
+
+### Pull mirror (the mirror fetches from the source of truth)
+
+For a GitHub (or other) source of truth copied into a Forgejo or Gitea that
+fetches on an interval. The mirror forge creates the repo itself, from the
+interval in the config:
 
 ```bash
-run=$(gh run list -R <mirror-owner>/<name> --limit 1 --json databaseId --jq '.[0].databaseId')
-gh run watch "$run" -R <mirror-owner>/<name> --exit-status
+echo '{"clone_addr":"https://github.com/<owner>/<name>.git","repo_owner":"<mirror-owner>","repo_name":"<name>",
+       "service":"git","mirror":true,"mirror_interval":"<interval>","private":true,"description":"..."}' \
+  | <mirror-cli> api -X POST repos/migrate --input -
 ```
 
-Set the icon as the repo avatar, on a Forgejo source of truth through the API,
-then set it by hand as the GitHub social preview when the mirror is public:
+A private source needs a read-only credential in the body (`auth_username`,
+`auth_token`): a fine-grained token limited to read access on the owner's
+repositories, from wherever the config says it is kept. Treat it as a secret:
+
+- Never print it or write it to the transcript. Read it from its file or store
+  and pipe the JSON body straight into the API call.
+- Test it first with `git ls-remote https://<user>:<token>@<host>/<owner>/<name>.git`
+  (output to `/dev/null`): a migrate that fails on authentication still leaves
+  an empty, broken repo on the mirror forge, which has to be deleted before
+  retrying.
+- One token for every mirror of an owner keeps rotation to one place; note its
+  expiry date where the config says, since the mirrors stop syncing when it
+  lapses.
+
+Check the mirror's `<branch>` against the source of truth once the migrate
+returns (it clones synchronously):
+
+```bash
+<mirror-cli> api repos/<mirror-owner>/<name>/branches/<branch> --jq .commit.id
+git rev-parse HEAD
+```
+
+### CI and the avatar
+
+Watch the first CI run to green on every job, on the family's CI host
+(`<ci-owner>` is the repo's owner there):
+
+```bash
+run=$(gh run list -R <ci-owner>/<name> --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$run" -R <ci-owner>/<name> --exit-status
+```
+
+Set the icon as the repo avatar on every Forgejo or Gitea host through its API
+(the source of truth or the mirror), and by hand as the GitHub social preview
+when the GitHub repo is public (`<cli>` and `<o>` are that host's CLI and
+owner):
 
 ```bash
 rsvg-convert -w 512 -h 512 icon.svg -o /tmp/<name>-avatar.png
 printf '{"image":"%s"}' "$(base64 -w0 /tmp/<name>-avatar.png)" \
-  | <forge-cli> api -X POST repos/<owner>/<name>/avatar --input -
+  | <cli> api -X POST repos/<o>/<name>/avatar --input -
 ```
 
 ## 5. Coverage
@@ -265,7 +317,7 @@ left for later (release workflow, decisions in `TODO.md`).
 
 ## Done when
 
-- Every configured host has the repo; the mirror's `<branch>` equals the
+- Every configured host has the repo; with a mirror, its `<branch>` equals the
   source of truth's.
 - The first CI run is green on every job, coverage at or above the floor.
 - Every commit is a green layer following the configured commit rules.

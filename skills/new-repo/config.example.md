@@ -12,10 +12,16 @@ Copy to `~/.config/skills/new-repo/config.md` and fill it in.
 
 - Source of truth: GitHub, owner `my-user`, CLI `gh`
 - Mirror: none
-<!-- Or a self-hosted forge as source of truth with GitHub as a push mirror:
+<!-- Or a self-hosted forge as source of truth, pushing to GitHub:
 - Source of truth: Forgejo at `git.example.com` (SSH `ssh://git@git.example.com/<owner>/<name>.git`), owner `my-user`, CLI `tea`
 - Mirror: GitHub, owner `my-user`, CLI `gh`
-- Mirror method: Forgejo server-side SSH push mirror with one GitHub deploy key per repo, interval `8h0m0s`, `sync_on_commit: true`
+- Mirror method: push. Forgejo server-side SSH push mirror with one GitHub deploy key per repo, titled `forgejo push mirror (git.example.com)`, interval `8h0m0s`, `sync_on_commit: true`
+-->
+<!-- Or GitHub as source of truth, copied into a self-hosted forge:
+- Source of truth: GitHub, owner `my-org`, CLI `gh`
+- Mirror: Forgejo at `git.example.com`, owner `my-user`, CLI `tea`
+- Mirror method: pull. `POST repos/migrate` with `mirror: true`, interval `8h0m0s`, same visibility as the source, Actions off on the mirror
+- Mirror token (private repos only): a read-only fine-grained GitHub token for `my-org`, kept in <your password manager entry>; expires <date>
 -->
 
 ## Families
